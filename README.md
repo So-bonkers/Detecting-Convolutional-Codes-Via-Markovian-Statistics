@@ -12,7 +12,7 @@ All scripts are self-contained and support **arbitrary code rates** (k/n), unifi
 | **`parity_eq_check.py`**                                                            | Computes **parity-check equations** for a given convolutional encoder, allowing verification and construction of parity templates directly from generator polynomials.                                                                            |
 | **`comp_parity.py`**                                                                | Implements **parity-template detection** using the parity-check equations from `parity_eq_check.py`. Supports arbitrary rate (k/n) encoders and allows template-based hypothesis testing between two codes.                                       |
 | **`Pd_plotter.py`**                                                                 | Runs the **hybrid detection experiment** combining empirical learning (Monte Carlo simulation) and symbolic Markov analysis. Produces Pd/Pc vs p or Pd vs N curves used in the paper’s main results.                                              |
-| **`sidebyside_plots.py`**                                                           | Generates comparative plots between different methods or configurations using CSV outputs from experiments (e.g., hybrid vs parity-template). Plots are rendered on a log-scale for clarity.                                                      |
+| **`plots_compare.py`**                                                           | Generates comparative plots between different methods or configurations using CSV outputs from experiments (e.g., hybrid vs parity-template). Plots are rendered on a log-scale for clarity.                                                      |
 
 ---
 
@@ -126,7 +126,7 @@ Output:
 
 Run:
 ```bash
-python sidebyside_plots.py
+python plots_compare.py
 ```
 
 This script compares CSV results from different runs (e.g., hybrid vs parity-template).
@@ -153,6 +153,6 @@ Each experiment produces:
 2. **Learn empirical transition matrices** for both codes using Monte Carlo.
 3. **Run Pd vs p or N detection curves** using `Pd_plotter.py`.
 4. **Optionally run parity-template experiments** using `comp_parity.py`.
-5. **Plot results** using `sidebyside_plots.py`.
+5. **Plot results** using `plots_compare.py`.
 
 This reproduces the main and comparative figures reported in the paper.
