@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 """
-sidebyside_plots.py
+plots_compare.py
 
-Modified to:
- - Use log scale on the y-axis (P_error plots).
- - Remove all P_error_log computations/plots entirely.
+Conference-ready, fully annotated **post-processing and visualization** script
+used in the WCNC-2026 paper:
 
-Plots:
- - P_error vs p (for each threshold, ours vs literature, for various N)
- - P_error vs N (for each threshold, ours vs literature, for various p)
+    "Detecting Convolutional Codes via a Markovian Statistic"
+
+This file generates the **comparative figures** shown in Section V, where the
+proposed hybrid Markov-based detector is compared against the parity-template
+baseline.
+
+──────────────────────────────────────────────────────────────────────────────
+ROLE IN THE PAPER (important clarification)
+──────────────────────────────────────────────────────────────────────────────
+
+• This script performs **no detection and no inference**.
+• It consumes CSV outputs produced by `Pd_plotter.py` (proposed method)
+  and `comp_parity.py` (baseline method).
+• Its sole purpose is **visualization and fair comparison**.
 
 """
 
@@ -18,123 +28,121 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# --------- Defaults ----------
-DEFAULT_HYBRID = "path of the saved hybrid results csv"
-DEFAULT_LIT    = "path of lit results csv"
-DEFAULT_SAVE_DIR = "path of save directory"
-P_ROUND_DECIMALS = 6
-# -----------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+# Helper: probability of error
+# ──────────────────────────────────────────────────────────────────────────────
 
-def p_error_linear(p_correct_series):
-    """Linear P_error = 1 - P_correct; clipped to [0, 1]"""
-    val = 1.0 - p_correct_series
-    return np.clip(val, 0.0, 1.0)
+def p_error(Pc):
+    """
+    Compute probability of error from probability of correct decision:
 
-def extract_curve_by_N(df, N, x_col='p_rnd', y_col='Pc'):
-    q = df[df['N'] == int(N)]
+        P_error = 1 − P_c.
+    """
+    return np.clip(1.0 - Pc, 0.0, 1.0)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Curve extraction helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def extract_by_N(df, N, x_col="p", y_col="Pc"):
+    """Extract (x, y) curve at fixed blocklength N."""
+    q = df[df["N"] == int(N)]
     if q.empty:
         return np.array([]), np.array([])
-    q_sorted = q.sort_values(by=x_col)
-    xs = q_sorted[x_col].to_numpy()
-    ys = q_sorted[y_col].to_numpy()
-    return xs, ys
+    q = q.sort_values(by=x_col)
+    return q[x_col].to_numpy(), q[y_col].to_numpy()
 
-def extract_curve_by_p(df, p_rnd, x_col='N', y_col='Pc'):
-    q = df[np.isclose(df['p_rnd'], p_rnd)]
+
+def extract_by_p(df, p, x_col="N", y_col="Pc"):
+    """Extract (x, y) curve at fixed channel crossover probability p."""
+    q = df[np.isclose(df["p"], p)]
     if q.empty:
         return np.array([]), np.array([])
-    q_sorted = q.sort_values(by=x_col)
-    xs = q_sorted[x_col].to_numpy()
-    ys = q_sorted[y_col].to_numpy()
-    return xs, ys
+    q = q.sort_values(by=x_col)
+    return q[x_col].to_numpy(), q[y_col].to_numpy()
 
-def main(hybrid_csv, lit_csv, save_dir):
-    os.makedirs(save_dir, exist_ok=True)
 
-    # --------- Load data ----------
+# ──────────────────────────────────────────────────────────────────────────────
+# Main plotting routine
+# ──────────────────────────────────────────────────────────────────────────────
+
+def main(hybrid_csv, baseline_csv, outdir):
+    os.makedirs(outdir, exist_ok=True)
+
+    # Load results
     df_h = pd.read_csv(hybrid_csv)
-    df_l = pd.read_csv(lit_csv)
+    df_b = pd.read_csv(baseline_csv)
 
-    if 'Pc' not in df_h.columns:
-        if 'Pd' in df_h.columns:
-            print("Note: hybrid CSV missing 'Pc' column — using 'Pd' as probability-correct.")
-            df_h['Pc'] = df_h['Pd']
-        else:
-            raise RuntimeError("Hybrid CSV must contain 'Pc' or 'Pd' column.")
+    # Normalize column naming
+    if "Pc" not in df_h.columns and "Pd" in df_h.columns:
+        df_h["Pc"] = df_h["Pd"]
+    if "Pc" not in df_b.columns and "Pd" in df_b.columns:
+        df_b["Pc"] = df_b["Pd"]
 
-    if 'Pd_mean' not in df_l.columns:
-        raise RuntimeError("Literature CSV must contain 'Pd_mean' column.")
+    Ns = sorted(set(df_h["N"]).union(df_b["N"]))
+    ps = sorted(set(df_h["p"]).union(df_b["p"]))
 
-    df_h['p_rnd'] = df_h['p'].round(P_ROUND_DECIMALS)
-    df_l['p_rnd'] = df_l['p'].round(P_ROUND_DECIMALS)
+    # ──────────────────────────────────────────────────────────────────────────
+    # P_error vs p (fixed N)
+    # ──────────────────────────────────────────────────────────────────────────
 
-    df_h['N'] = df_h['N'].astype(int)
-    df_l['N'] = df_l['N'].astype(int)
-
-    df_l = df_l.rename(columns={'Pd_mean': 'Pc_lit'})
-    thresholds = sorted(df_l['threshold'].unique())
-    print("Found thresholds:", thresholds)
-
-    for th in thresholds:
-        print(f"\nProcessing threshold = {th}")
-        df_l_th = df_l[df_l['threshold'] == th]
-
-        # ========== P_error vs p (for each N) ==========
-        Ns_union = sorted(set(df_h['N'].unique()).union(set(df_l_th['N'].unique())))
+    for N in Ns:
         plt.figure(figsize=(6, 5))
 
-        for idx, N in enumerate(Ns_union):
-            # ours
-            xs_h, ys_h = extract_curve_by_N(df_h, N, x_col='p_rnd', y_col='Pc')
-            if len(xs_h) > 0:
-                plt.plot(xs_h, p_error_linear(pd.Series(ys_h)),
-                         label=f"ours N={N}", linestyle='solid')
-            # literature
-            xs_l, ys_l = extract_curve_by_N(df_l_th, N, x_col='p_rnd', y_col='Pc_lit')
-            if len(xs_l) > 0:
-                plt.plot(xs_l, p_error_linear(pd.Series(ys_l)),
-                         label=f"lit N={N}", linestyle='dotted')
+        xh, yh = extract_by_N(df_h, N)
+        xb, yb = extract_by_N(df_b, N)
 
-        plt.xlabel("p")
-        plt.ylabel("P_error")
-        plt.title(f"P_error vs p (threshold={th})")
-        # plt.yscale("log")   # <<<<<<<<<< log scale here
-        plt.grid(True, which="both")
+        if len(xh):
+            plt.plot(xh, p_error(yh), marker='o', label=f"Hybrid (N={N})")
+        if len(xb):
+            plt.plot(xb, p_error(yb), marker='s', linestyle='--', label=f"Parity baseline (N={N})")
+
+        plt.xlabel("BSC crossover probability p")
+        plt.ylabel("Probability of error $P_{\\mathrm{err}}$")
+        plt.title(f"$P_{{\\mathrm{{err}}}}$ vs $p$ (N={N})")
+        plt.grid(True)
         plt.legend()
-        fname = os.path.join(save_dir, f"Perror_vs_p_threshold_{th:.6f}.png")
+
+        fname = os.path.join(outdir, f"Perr_vs_p_N{N}.png")
         plt.savefig(fname, dpi=200, bbox_inches="tight")
         plt.close()
-        print("Saved:", fname)
 
-        # ========== P_error vs N (for each p) ==========
-        p_union = sorted(set(df_h['p_rnd'].unique()).union(set(df_l_th['p_rnd'].unique())))
+    # ──────────────────────────────────────────────────────────────────────────
+    # P_error vs N (fixed p)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    for p in ps:
         plt.figure(figsize=(6, 5))
 
-        for idx, pval in enumerate(p_union):
-            xs_h, ys_h = extract_curve_by_p(df_h, pval, x_col='N', y_col='Pc')
-            if len(xs_h) > 0:
-                plt.plot(xs_h, p_error_linear(pd.Series(ys_h)),
-                         label=f"ours p={pval}", linestyle='solid')
-            xs_l, ys_l = extract_curve_by_p(df_l_th, pval, x_col='N', y_col='Pc_lit')
-            if len(xs_l) > 0:
-                plt.plot(xs_l, p_error_linear(pd.Series(ys_l)),
-                         label=f"lit p={pval}", linestyle='dotted')
+        xh, yh = extract_by_p(df_h, p)
+        xb, yb = extract_by_p(df_b, p)
 
-        plt.xlabel("N")
-        plt.ylabel("P_error")
-        plt.title(f"P_error vs N (threshold={th})")
-        # plt.yscale("log")   # <<<<<<<<<< log scale here
-        plt.grid(True, which="both")
+        if len(xh):
+            plt.plot(xh, p_error(yh), marker='o', label=f"Hybrid (p={p})")
+        if len(xb):
+            plt.plot(xb, p_error(yb), marker='s', linestyle='--', label=f"Parity baseline (p={p})")
+
+        plt.xlabel("Blocklength N")
+        plt.ylabel("Probability of error $P_{\\mathrm{err}}$")
+        plt.title(f"$P_{{\\mathrm{{err}}}}$ vs $N$ (p={p})")
+        plt.grid(True)
         plt.legend()
-        fname = os.path.join(save_dir, f"Perror_vs_N_threshold_{th:.6f}.png")
+
+        fname = os.path.join(outdir, f"Perr_vs_N_p{p}.png")
         plt.savefig(fname, dpi=200, bbox_inches="tight")
         plt.close()
-        print("Saved:", fname)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Entry point
+# ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Compare P_error vs p and vs N (log scale y-axis).")
-    parser.add_argument("--hybrid", type=str, default=DEFAULT_HYBRID, help="Path to hybrid CSV (ours).")
-    parser.add_argument("--lit", type=str, default=DEFAULT_LIT, help="Path to literature CSV.")
-    parser.add_argument("--outdir", type=str, default=DEFAULT_SAVE_DIR, help="Directory to save output plots.")
+    parser = argparse.ArgumentParser(description="Compare hybrid and parity-template detectors")
+    parser.add_argument("--hybrid", required=True, help="CSV from Pd_plotter.py")
+    parser.add_argument("--baseline", required=True, help="CSV from comp_parity.py")
+    parser.add_argument("--outdir", default="plots", help="Output directory for plots")
     args = parser.parse_args()
-    main(args.hybrid, args.lit, args.outdir)
+
+    main(args.hybrid, args.baseline, args.outdir)
