@@ -1,158 +1,230 @@
-# README — Detecting Convolutional Codes via Markovian statistics
-This repository contains the complete codebase used in our paper on convolutional code detection using **Markov-modelling of Viterbi metrics** and **parity-template hypothesis testing**.
-All scripts are self-contained and support **arbitrary code rates** (k/n), unified under the generalized framework described in the paper.
+# Detecting Convolutional Codes via a Markovian Statistic
+
+**WCNC 2026 — Reproducibility, Artifact, and Demo Guide**
+
+This repository contains the **complete, camera-ready codebase** used in the paper:
+
+> **Detecting Convolutional Codes via a Markovian Statistic**
+> Accepted at *IEEE Wireless Communications and Networking Conference (WCNC) 2026*
+
+The repository implements:
+
+1. The **proposed Markov-chain-based detector** (Sections III–V), and
+2. A **parity-template baseline** used solely for comparison (Section IV).
+
+All scripts are fully documented and aligned **equation-by-equation** with the paper.
 
 ---
 
-##  Repository Overview
+## 1. Scientific Scope of the Repository
 
-| File                                                                                | Description                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`viterbi_markov.py`**                                                             | Constructs the **Viterbi relative-metric Markov chain**, enumerates reachable metric states, and builds the symbolic transition matrix (T(p)) for a given decoder code. This forms the analytical backbone for detection performance computation. |
-| **`parity_eq_check.py`**                                                            | Computes **parity-check equations** for a given convolutional encoder, allowing verification and construction of parity templates directly from generator polynomials.                                                                            |
-| **`comp_parity.py`**                                                                | Implements **parity-template detection** using the parity-check equations from `parity_eq_check.py`. Supports arbitrary rate (k/n) encoders and allows template-based hypothesis testing between two codes.                                       |
-| **`Pd_plotter.py`**                                                                 | Runs the **hybrid detection experiment** combining empirical learning (Monte Carlo simulation) and symbolic Markov analysis. Produces Pd/Pc vs p or Pd vs N curves used in the paper’s main results.                                              |
-| **`plots_compare.py`**                                                           | Generates comparative plots between different methods or configurations using CSV outputs from experiments (e.g., hybrid vs parity-template). Plots are rendered on a log-scale for clarity.                                                      |
+### 1.1 Problem Statement (from the paper)
+
+Given a noisy bitstream produced by an **unknown convolutional encoder** over a
+binary symmetric channel (BSC), the goal is to decide between two candidate
+encoders:
+[
+\mathcal{H}_1 : \text{Encoder } G_1(D), \qquad
+\mathcal{H}_2 : \text{Encoder } G_2(D).
+]
+
+The paper proposes a detector based on the **Markovian structure of relative
+Viterbi metrics**, and derives its **asymptotic error exponent** analytically.
 
 ---
 
-## Setup Instructions
+## 2. Repository Structure
 
-### Dependencies
+```
+.
+├── viterbi_markov.py          # Core theory: Sections III-A, III-B (Eq. 4–6)
+├── alpha_exponent.py          # Error exponent: Section III-C (Eq. 7)
+├── parity_eqn_check.py        # Parity-check derivation (baseline, Section IV)
+├── comp_parity.py             # Parity-template detector (baseline)
+├── Pd_plotter.py              # Hybrid detector experiments (Section V)
+├── plots_compare.py           # Post-processing & comparison plots
+├── demo_script.py       # Interactive demo script (quick-start)
+├── results_experiments/       # Generated CSVs and plots (created at runtime)
+└── README.md                  # This file
+```
 
-All scripts are written in Python 3.8+ and require the following packages:
+Each file is **self-contained**, executable, and documented at a level suitable
+for **artifact evaluation and reproducibility**.
+
+---
+
+## 3. Mathematical–Code Correspondence
+
+| Paper Component                   | Equation / Section | Code File              |
+| --------------------------------- | ------------------ | ---------------------- |
+| Relative Viterbi metric recursion | Eq. (4), Eq. (5)   | `viterbi_markov.py`    |
+| Markov transition probabilities   | Eq. (6)            | `viterbi_markov.py`    |
+| Chernoff error exponent           | Eq. (7)            | `alpha_exponent.py`    |
+| Parity-check equations            | —                  | `parity_eqn_check.py`  |
+| Parity-template detector          | Section IV         | `comp_parity.py`       |
+| Hybrid likelihood detector        | Section V          | `Pd_plotter.py`        |
+| Interactive demo                  | —                  | `demo_script.py` |
+
+---
+
+## 4. Dependencies and Environment
+
+### 4.1 Required Packages
+
+All code is written in **Python 3.8+** and requires:
 
 ```bash
 pip install numpy sympy pandas matplotlib tqdm
 ```
 
-Optional (for extended plotting):
+No machine-learning libraries are used.
 
-```bash
-pip install scipy seaborn
-```
-
-### Recommended Environment
+### 4.2 Recommended Setup
 
 ```bash
 python -m venv venv
-source venv/bin/activate        # Linux/macOS
+source venv/bin/activate        # Linux / macOS
 # venv\Scripts\activate         # Windows
 ```
 
 ---
 
-## Quickstart Guide
+## 5. Quick Interactive Demo (Recommended First Step)
 
-### 1. Build Symbolic Transition Matrix (Markov Model)
+For a **minimal, user-friendly entry point**, run:
 
-Run:
+```bash
+python demo_script.py
+```
+
+This script:
+
+* Prompts the user to either:
+
+  * Select from **predefined example convolutional codes** used in the paper, or
+  * Enter **custom code parameters** ((k, n, m)) and generator taps
+* Automatically runs the **hybrid Markov-based detector**
+* Directly produces plots of:
+
+  * **(P_d) vs (p)** (probability of detection vs channel noise)
+  * **(P_d) vs (N)** (probability of detection vs blocklength)
+
+This script is intended for:
+
+* First-time readers of the repository
+* Demonstrations and teaching
+* Sanity checks and exploratory use
+
+**Note:**
+`demo_script.py` uses the same detection logic as `Pd_plotter.py` but with
+reduced Monte-Carlo settings for faster execution. It is *not* used to generate
+the paper’s figures.
+
+---
+
+## 6. Reproducing the Main Results (Section V)
+
+### Step 1 — Build the Markov Model
 
 ```bash
 python viterbi_markov.py
 ```
 
-The script interactively asks for:
+This:
 
-* (k, n, m) (code rate and memory)
-* Generator polynomials (in octal or binary matrix form)
+* Enumerates all reachable **relative Viterbi metric states**
+* Constructs the symbolic transition matrix (T(p))
+* Saves the matrix for reuse
 
-It enumerates all reachable **relative-metric states** and builds a **symbolic transition matrix** (T(p)) describing state evolution under BSC crossover probability (p).
-
-Output:
-
-* Symbolic matrix (T(p))
-* Reachable state list
-* Optionally saved CSV for reuse in later experiments
+Corresponds to **Sections III-A and III-B**.
 
 ---
 
-### 2. Parity-Template Discovery
-
-Run:
+### Step 2 — (Optional) Compute the Error Exponent
 
 ```bash
-python parity_eq_check.py
+python alpha_exponent.py
 ```
 
-This computes the **parity-check equations** from input generator polynomials.
-It supports multiple formats (octal, binary vectors, semicolon-separated lists).
-The output can be directly fed into `comp_parity.py` for template-based detection.
+Evaluates the Chernoff information for Markov chains:
+[
+I_{\mathrm{err}} = \min_{u \in [0,1]} -\log \rho(M(u)),
+]
+corresponding to **Eq. (7)** in the paper.
 
 ---
 
-### 3. Parity-Template Detection Experiment
-
-Run:
-
-```bash
-python comp_parity.py
-```
-
-This performs detection using **template satisfaction counts** between two encoders.
-It accepts interactive input for both encoders and automatically generates and evaluates parity templates.
-
-You can fix a single template for all N values and run detection across a range of blocklengths or noise probabilities.
-
----
-
-### 4. Hybrid Markov-Based Detection (Main Experiment)
-
-Run:
+### Step 3 — Run the Hybrid Detector (Main Experiment)
 
 ```bash
 python Pd_plotter.py
 ```
 
-This script implements the **hybrid framework** from the paper:
+This script:
 
-* Builds or loads the symbolic Markov matrix (T(p)) for the decoder.
-* Learns empirical transition probabilities from long simulated sequences.
-* Performs hypothesis testing between the two models.
-* Produces Pd and Pc vs p or N plots.
+* Learns an empirical transition matrix (\hat{P}_1)
+* Uses (T(p=1/2)) as an uninformative reference
+* Performs likelihood-ratio testing on metric sequences
 
-Default parameters (editable at the top of the file):
+Outputs:
 
-* `genc1`, `genc2`: encoder generator lists
-* `num_iter`: number of Monte Carlo trials
-* `p_vec`: list of channel error probabilities
-* `save_dir`: directory for CSVs and plots
-
-Output:
-
-* `results_experiments/` folder with Pd/Pc CSVs and PNG plots
-
-### 5. Comparative Plotting
-
-Run:
-```bash
-python plots_compare.py
-```
-
-This script compares CSV results from different runs (e.g., hybrid vs parity-template).
-It produces side-by-side plots with logarithmic y-axes for better visibility near low error probabilities.
-
-
-##  Outputs
-
-Each experiment produces:
-
-* **CSV files** — containing Pd, Pc, and standard deviations for each (p) and (N)
-* **PNG plots** — automatically generated from results
-* Default directories:
-
-  * `results_experiments/` (hybrid method)
-  * `results_parity/` (parity-template method)
-  * `plots/` (comparative plots)
+* CSV files with (P_d), (P_c)
+* Plots used in **Section V**
 
 ---
 
-## Typical Workflow
+### Step 4 — Run the Baseline Parity Detector (Section IV)
 
-1. **Compute symbolic Markov matrix** using `viterbi_markov.py` for the decoder.
-2. **Learn empirical transition matrices** for both codes using Monte Carlo.
-3. **Run Pd vs p or N detection curves** using `Pd_plotter.py`.
-4. **Optionally run parity-template experiments** using `comp_parity.py`.
-5. **Plot results** using `plots_compare.py`.
+```bash
+python comp_parity.py
+```
 
-This reproduces the main and comparative figures reported in the paper.
+Implements the **parity-template baseline**, which relies on heuristic
+thresholding and does **not** admit an error-exponent analysis.
+
+---
+
+### Step 5 — Generate Comparison Plots
+
+```bash
+python plots_compare.py \
+  --hybrid results_experiments/Pd_hybrid_results.csv \
+  --baseline results_parity/Pd_parity_results.csv
+```
+
+Produces the comparative plots reported in the paper.
+
+---
+
+## 7. Notes on Reproducibility
+
+* All Monte-Carlo experiments use **fixed random seeds** by default
+* All reported results were generated using this codebase
+* No post-hoc tuning or undocumented heuristics are used in the proposed method
+
+The parity-template baseline requires manual threshold selection ((\gamma)),
+as explicitly stated in both the paper and the code.
+
+---
+
+## 8. Citation
+
+If you use or build upon this code, please cite:
+
+```bibtex
+@inproceedings{kamthankarWCNC2026,
+  title     = {Detecting Convolutional Codes via a Markovian Statistic},
+  author    = {Shubhankar Abhay Kamthankar, Guneesh Vats and Arti Yardi},
+  booktitle = {IEEE Wireless Communications and Networking Conference (WCNC)},
+  year      = {2026}
+}
+```
+
+---
+
+## 9. Contact
+
+For questions regarding the theory, implementation, or reproducibility of the
+results, please contact the corresponding author listed in the WCNC paper.
+
+---
